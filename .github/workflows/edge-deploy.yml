@@ -178,9 +178,10 @@ jobs:
           ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
 
           dvc pull -v
+          dvc pull dataset/exports/epi-v1 -v
 
-      - name: Recuperar dataset via DVC
-        run: dvc pull dataset/exports/epi-v1
+      # - name: Recuperar dataset via DVC
+      #   run: dvc pull dataset/exports/epi-v1
 
       - name: Executar quality gate com dataset customizado
         run: |
