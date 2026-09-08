@@ -177,8 +177,17 @@ jobs:
           # Test SSH connectivity
           ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          dvc pull -v
-          dvc pull dataset/exports/epi-v1 -v
+          # dvc pull -v
+          # dvc pull dataset/exports/epi-v1 -v
+
+          # Pull specific dataset with recursive flag to ensure all files are materialized
+          dvc pull dataset/exports/epi-v1 --force -v
+
+          # Verify the dataset structure exists
+          if [ ! -d "dataset/exports/epi-v1/valid/images" ]; then
+            echo "ERROR: Dataset images directory not found after pull"
+            exit 1
+          fi
 
       # - name: Recuperar dataset via DVC
       #   run: dvc pull dataset/exports/epi-v1
