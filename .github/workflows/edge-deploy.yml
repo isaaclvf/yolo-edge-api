@@ -173,18 +173,24 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-          # Test SSH connectivity
-          ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Wait for Tailscale to be ready and verify connectivity to DVC storage host
+          for i in {1..30}; do
+            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no isaac@100.98.31.83 "test -d /home/isaac/dvc-storage" 2>/dev/null; then
+              echo "✓ SSH connectivity to DVC storage verified"
+              break
+            fi
+            echo "⏳ Waiting for SSH connectivity... (attempt $i/30)"
+            sleep 2
+          done
+
+          # Add host key to known_hosts
+          ssh-keyscan -t ed25519,rsa 100.98.31.83 >> ~/.ssh/known_hosts 2>/dev/null || true
 
           # Initialize DVC cache directory
           mkdir -p .dvc/cache/files/md5
 
-          # Pull both dataset and model with better error handling
-          if ! dvc pull dataset/exports/epi-v1 models/yolo-epi.pt --force -v; then
-            echo "ERROR: Failed to pull dataset/model via DVC"
-            dvc remote list
-            exit 1
-          fi
+          # Pull all DVC-tracked files
+          dvc pull --force -v
 
           # Verify the dataset structure exists
           if [ ! -d "dataset/exports/epi-v1/valid/images" ]; then
