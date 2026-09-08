@@ -59,7 +59,7 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-          dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
+          # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
           dvc pull
 
       - name: Disponibiliza o modelo em /app/models (mesmo path usado no Docker)
@@ -170,7 +170,7 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-          dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
+          # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
           dvc pull
 
       - name: Executar quality gate (mAP@0.5 >= 0.50)
