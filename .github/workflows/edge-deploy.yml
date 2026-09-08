@@ -60,7 +60,10 @@ jobs:
           chmod 600 ~/.ssh/config
 
           # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
-          dvc pull
+          # Test SSH connectivity
+          ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          dvc pull -v
 
       - name: Disponibiliza o modelo em /app/models (mesmo path usado no Docker)
         run: |
@@ -171,7 +174,10 @@ jobs:
           chmod 600 ~/.ssh/config
 
           # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
-          dvc pull
+          # Test SSH connectivity
+          ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          dvc pull -v
 
       - name: Executar quality gate (mAP@0.5 >= 0.50)
         run: python scripts/validate_model.py --threshold 0.50
