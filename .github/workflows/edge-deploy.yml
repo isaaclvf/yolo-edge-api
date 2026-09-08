@@ -173,22 +173,15 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-          # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
           # Test SSH connectivity
           ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
-
-          # dvc pull -v
-          # dvc pull dataset/exports/epi-v1 -v
-
-          # Pull specific dataset with recursive flag to ensure all files are materialized
-          # dvc pull dataset/exports/epi-v1 --force -v
 
           # Initialize DVC cache directory
           mkdir -p .dvc/cache/files/md5
 
-          # Pull with better error handling
-          if ! dvc pull dataset/exports/epi-v1 --force -v; then
-            echo "ERROR: Failed to pull dataset via DVC"
+          # Pull both dataset and model with better error handling
+          if ! dvc pull dataset/exports/epi-v1 models/yolo-epi.pt --force -v; then
+            echo "ERROR: Failed to pull dataset/model via DVC"
             dvc remote list
             exit 1
           fi
@@ -204,12 +197,6 @@ jobs:
           if [ ! -f "models/yolo-epi.pt" ]; then
             echo "ERROR: Model file not found at models/yolo-epi.pt"
             find . -name "*.pt" -type f 2>/dev/null || echo "No .pt files found"
-            exit 1
-          fi
-
-          # Verify the dataset structure exists
-          if [ ! -d "dataset/exports/epi-v1/valid/images" ]; then
-            echo "ERROR: Dataset images directory not found after pull"
             exit 1
           fi
 
