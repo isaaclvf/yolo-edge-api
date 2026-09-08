@@ -44,26 +44,39 @@ jobs:
 
       - name: Download modelo para testes
         run: |
-          pip install "dvc[ssh]"
+          set -euo pipefail
+
+          # Install DVC with ssh support
+          pip install --no-cache-dir "dvc[ssh]"
+
+          # Prepare SSH key and agent (use existing secret)
           mkdir -p ~/.ssh
-          echo -e "${{ secrets.RPI_SSH_KEY }}" | tr -d '\r' > ~/.ssh/dvc_key
+          echo "${{ secrets.RPI_SSH_KEY }}" | tr -d '\r' > ~/.ssh/dvc_key
           chmod 600 ~/.ssh/dvc_key
 
-          # Configure SSH to use the key and accept unknown hosts
-          cat > ~/.ssh/config << EOF
-          Host *
-            AddKeysToAgent yes
-            StrictHostKeyChecking no
-            UserKnownHostsFile=/dev/null
-            IdentityFile ~/.ssh/dvc_key
-          EOF
-          chmod 600 ~/.ssh/config
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/dvc_key || true
 
-          # dvc remote modify --local local_remote keyfile ~/.ssh/dvc_key
-          # Test SSH connectivity
-          ssh-keyscan -t ed25519,rsa $(dvc remote list | grep ssh | awk '{print $2}' | cut -d: -f1) >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Add remote host key to known_hosts to avoid interactive prompt
+          ssh-keyscan -H 100.98.31.83 >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          dvc pull -v
+          # Show DVC remotes and config for debugging
+          echo "====== .dvc/config ======"
+          sed -n '1,200p' .dvc/config || true
+          echo "====== dvc remote list ======"
+          dvc remote list || true
+
+          # Pull using explicit remote and show verbose logs; fail with diagnostics if needed
+          echo "Attempting dvc pull from 'local_remote'..."
+          if ! dvc pull -v -r local_remote; then
+            echo "dvc pull FAILED — collecting diagnostics..."
+            dvc status -c || true
+            echo "Local .dvc/cache listing:"
+            ls -la .dvc/cache || true
+            echo "Looking for .pt files:"
+            find . -name "*.pt" -print || true
+            exit 1
+          fi
 
       - name: Disponibiliza o modelo em /app/models (mesmo path usado no Docker)
         run: |
@@ -159,23 +172,20 @@ jobs:
 
       - name: Recuperar modelo via DVC
         run: |
+          set -euo pipefail
+
+          pip install --no-cache-dir "dvc[ssh]"
+
           mkdir -p ~/.ssh
           echo -e "${{ secrets.RPI_SSH_KEY }}" | tr -d '\r' > ~/.ssh/dvc_key
           chmod 600 ~/.ssh/dvc_key
 
-          # Configure SSH to use the key and accept unknown hosts
-          cat > ~/.ssh/config << EOF
-          Host *
-            AddKeysToAgent yes
-            StrictHostKeyChecking no
-            UserKnownHostsFile=/dev/null
-            IdentityFile ~/.ssh/dvc_key
-          EOF
-          chmod 600 ~/.ssh/config
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/dvc_key || true
 
-          # Wait for Tailscale to be ready and verify connectivity to DVC storage host
+          # Wait for Tailscale / network and ensure remote reachable
           for i in {1..30}; do
-            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no isaac@100.98.31.83 "test -d /home/isaac/dvc-storage" 2>/dev/null; then
+            if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no isaac@100.98.31.83 "test -d /home/isaac/dvc-storage" 2>/dev/null; then
               echo "✓ SSH connectivity to DVC storage verified"
               break
             fi
@@ -183,16 +193,29 @@ jobs:
             sleep 2
           done
 
-          # Add host key to known_hosts
-          ssh-keyscan -t ed25519,rsa 100.98.31.83 >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Add host key to known_hosts (non-interactive)
+          ssh-keyscan -H 100.98.31.83 >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          # Initialize DVC cache directory
+          # Ensure cache dir exists
           mkdir -p .dvc/cache/files/md5
 
-          # Pull all DVC-tracked files
-          dvc pull --force -v
+          echo "====== .dvc/config ======"
+          sed -n '1,200p' .dvc/config || true
+          dvc remote list || true
+          echo "Attempting dvc pull from 'local_remote' (verbose)..."
+          if ! dvc pull --force -v -r local_remote; then
+            echo "dvc pull FAILED — diagnostics:"
+            dvc status -c || true
+            echo ".dvc/cache listing:"
+            ls -la .dvc/cache || true
+            echo "Remote listing (attempting from runner):"
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=no isaac@100.98.31.83 'ls -la /home/isaac/dvc-storage/files/md5 || true'
+            echo "Workspace .pt files:"
+            find . -name "*.pt" -print || true
+            exit 1
+          fi
 
-          # Verify the dataset structure exists
+          # Verify dataset and model exist as before
           if [ ! -d "dataset/exports/epi-v1/valid/images" ]; then
             echo "ERROR: Dataset images directory not found after pull"
             ls -la dataset/exports/epi-v1/ || echo "Directory does not exist"
